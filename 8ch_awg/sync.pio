@@ -1,0 +1,40 @@
+.program sync
+.side_set 1 opt
+.wrap_target
+    mov x, OSR          ; Move data from OSR to X
+    wait 1 pin 0 side 1 [10]; Wait for pin 0 to go high
+    jmp delay;
+
+delay:
+    nop side 0 [15]     ; Wait for 31 cycles
+    nop side 0 [15]     ; Wait for 31 cycles
+    nop side 0 [15]     ; Wait for 31 cycles
+    nop side 0 [15]     ; Wait for 31 cycles
+    nop side 0 [15]     ; Wait for 31 cycles
+    nop side 0 [13]     ; Wait for 31 cycles
+    irq set 0;
+    jmp X-- delay side 1 [10]; Decrement X and loop until X is 0
+    irq clear 0;
+.wrap
+
+
+ % c-sdk {
+void initsync(PIO pio, uint sm,float clk_div, int syncPin, int LEDpin) {
+    uint offset = pio_add_program(pio, &sync_program);
+    pio_sm_config c = sync_program_get_default_config(offset);
+    pio_gpio_init(pio, syncPin);
+    pio_sm_set_consecutive_pindirs(pio, sm, syncPin, 1, false);
+    // Set up side-set pins
+
+    pio_gpio_init(pio, LEDpin);
+    pio_sm_set_consecutive_pindirs(pio, sm, LEDpin, 1, true);
+   
+    // Configure the state machine
+    sm_config_set_in_pins(&c, syncPin);
+    sm_config_set_sideset_pins(&c, LEDspin);
+    sm_config_set_out_shift(&c, false, true, 32);
+    sm_config_set_clkdiv(&c, clk_div);  // Set the clock divider
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

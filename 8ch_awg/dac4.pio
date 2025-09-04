@@ -1,0 +1,42 @@
+.program dac4 //5 side-set pins
+
+.wrap_target
+    wait 0 GPIO 19;
+    wait 1 GPIO 19;
+    out pins 8; //side 18; set a/b low, cs low, wr low, clr high, ldac high, 6.6 ns write data
+    set pins 18 [4];
+    set pins 22 [4];
+    set pins 20 [4];
+    set pins 31;
+ 
+
+% c-sdk {
+void initdac4 (PIO pio, uint sm,float clk_div, int DATA_PIN_BASE, int SIDESET_PIN_BASE, int DMAsyncPin) {
+    uint offset = pio_add_program(pio, &dac4_program);
+    pio_sm_config c = dac4_program_get_default_config(offset);
+
+
+    pio_gpio_init(pio, DMAsyncPin);
+    pio_sm_set_consecutive_pindirs(pio, sm, DMAsyncPin, 1, false);
+    sm_config_set_in_pins(&c, DMAsyncPin);
+
+    for (int i = 0; i < 5; i++) {
+        pio_gpio_init(pio, SIDESET_PIN_BASE + i);
+    }
+    pio_sm_set_consecutive_pindirs(pio, sm, SIDESET_PIN_BASE, 5, true);
+    sm_config_set_set_pins(&c, SIDESET_PIN_BASE, 5);
+    
+    // Set up data output pins
+    for (int i = 0; i < 8; i++) {
+        pio_gpio_init(pio, DATA_PIN_BASE + i);
+    }
+    pio_sm_set_consecutive_pindirs(pio, sm, DATA_PIN_BASE, 8, true);
+    sm_config_set_out_pins(&c, DATA_PIN_BASE, 8);
+    sm_config_set_out_shift(&c, true, true, 8); // Shift out 8 bits, LSB first
+
+    
+    sm_config_set_clkdiv(&c, clk_div);  // Set the clock divider
+
+    pio_sm_init(pio, sm, offset, &c);
+}
+%}

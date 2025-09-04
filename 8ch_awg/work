@@ -1,0 +1,145 @@
+.program dac0
+.side_set 4 opt ; 4 side-set pins
+
+.wrap_target
+    pull          ; Pull 8-bit value from FIFO (blocking if empty)
+    nop side 2
+    out pins, 8 side 2 ; Output 8-bit value and set side-set pins high (7 = 0b111)
+    nop side 12         ; Set side-set pins low to indicate transmission
+    nop side 14; 
+    irq set 0;
+ 
+
+.wrap
+
+.program dac1
+.side_set 4 opt ; 4 side-set pins
+.wrap_target
+    pull          ; Pull 8-bit value from FIFO (blocking if empty)
+    nop side 3
+    out pins, 8 side 3 ; Output 8-bit value and set side-set pins high (7 = 0b111)
+    nop side 13         ; Set side-set pins low to indicate transmission
+    nop side 15
+    
+
+.wrap
+
+.program dac2
+.side_set 4 opt ; 4 side-set pins
+
+.wrap_target
+    pull          ; Pull 8-bit value from FIFO (blocking if empty)
+    nop side 2
+    out pins, 8 side 2 ; Output 8-bit value and set side-set pins high (7 = 0b111)
+    nop side 12         ; Set side-set pins low to indicate transmission
+    nop side 14;
+
+
+.wrap
+
+.program dac3
+.side_set 4 opt ; 4 side-set pins
+.wrap_target
+    pull          ; Pull 8-bit value from FIFO (blocking if empty)
+    nop side 3
+    out pins, 8 side 3 ; Output 8-bit value and set side-set pins high (7 = 0b111)
+    nop side 13         ; Set side-set pins low to indicate transmission
+    nop side 15 ;
+
+
+.wrap
+
+% c-sdk {
+// this is a raw helper function for use by the user which sets up the GPIO output, and configures the SM to output on a particular pin
+#include "pinOut.h"
+void dac_program_init(PIO pio, uint sm, float clk_div) {
+    uint offset;
+    switch (sm) {
+        case 0:
+            offset = pio_add_program(pio, &dac0_program);
+            break;
+        case 1:
+            offset = pio_add_program(pio, &dac1_program);
+            break;
+        case 2:
+            offset = pio_add_program(pio, &dac2_program);
+            break;
+        case 3:
+            offset = pio_add_program(pio, &dac3_program);
+            break;
+        default:
+            printf("Invalid state machine: %d\n", sm);
+            return; // Invalid state machine
+    }
+    printf("PIO program loaded at offset: %d for SM %d\n", offset, sm);
+
+    // Initialize GPIO pins for data output
+    for (int i = 0; i < 8; i++) {
+        pio_gpio_init(pio, DATA_PIN_BASE + i); // Initialize GPIO pins
+    }
+    pio_sm_set_consecutive_pindirs(pio, sm, DATA_PIN_BASE, 8, true); // Set as outputs
+    printf("Initialized data pins %d to %d as outputs\n", DATA_PIN_BASE, DATA_PIN_BASE + 7);
+
+    // Initialize GPIO pins for side-set output
+    if (sm == 0 || sm == 1) {
+        // SM0 and SM1 share SIDESET_PIN_BASESM01
+        for (int i = 0; i < 4; i++) {
+            pio_gpio_init(pio, SIDESET_PIN_BASESM01 + i); // Initialize GPIO pins
+        }
+        pio_sm_set_consecutive_pindirs(pio, sm, SIDESET_PIN_BASESM01, 4, true); // Set as outputs
+        printf("Initialized side-set pins %d to %d as outputs for SM %d\n", SIDESET_PIN_BASESM01, SIDESET_PIN_BASESM01 + 3, sm);
+    } else if (sm == 2 || sm == 3) {
+        // SM2 and SM3 share SIDESET_PIN_BASESM23
+        for (int i = 0; i < 4; i++) {
+            pio_gpio_init(pio, SIDESET_PIN_BASESM23 + i); // Initialize GPIO pins
+        }
+        pio_sm_set_consecutive_pindirs(pio, sm, SIDESET_PIN_BASESM23, 4, true); // Set as outputs
+        printf("Initialized side-set pins %d to %d as outputs for SM %d\n", SIDESET_PIN_BASESM23, SIDESET_PIN_BASESM23 + 3, sm);
+    }
+
+    // Configure the state machine
+    pio_sm_config c = pio_get_default_sm_config();
+    sm_config_set_out_pins(&c, DATA_PIN_BASE, 8); // 8-bit data output
+    if (sm == 0 || sm == 1) {
+        sm_config_set_sideset_pins(&c, SIDESET_PIN_BASESM01); // Side-set for SM0 and SM1
+    } else if (sm == 2 || sm == 3) {
+        sm_config_set_sideset_pins(&c, SIDESET_PIN_BASESM23); // Side-set for SM2 and SM3
+    }
+    sm_config_set_out_shift(&c, true, true, 8); // Shift out 8 bits, LSB first
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX); // Use TX FIFO
+    sm_config_set_clkdiv(&c, clk_div); // Set the clock divider
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+    printf("State machine %d initialized and enabled\n", sm);
+}
+%}
+
+#include <stdio.h>
+#include "pico/stdlib.h"
+#include "hardware/pio.h"
+#include "hardware/irq.h"
+#include "dac.pio.h"
+
+
+int main() {
+    stdio_init_all();
+    sleep_ms(5000);
+    PIO pio = pio0;
+
+    // Initialize the state machines
+    printf("Initializing state machines...\n");
+    dac_program_init(pio, 0, 100.0); // SM0
+
+  
+
+
+
+    while (1) {
+        // Continuously send data to the state machines
+        pio_sm_put_blocking(pio, 0, 0); // Send data to PIO
+        sleep_us(100);
+        pio_sm_put_blocking(pio, 0, 255); // Send data to PIO
+        sleep_us(100);
+    }
+}

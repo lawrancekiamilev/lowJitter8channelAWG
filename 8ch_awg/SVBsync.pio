@@ -1,0 +1,33 @@
+.program SVBsync
+.side_set 1 opt
+.wrap_target
+    out X 32;
+    wait 1 pin 0;
+    jmp delay;
+
+delay:
+    jmp X-- delay side 0 [16];
+    nop side 1 [10];
+.wrap
+
+.wrap
+% c-sdk {
+    void initSVBsync(PIO pio, uint sm,float clk_div, int syncPin, int SVBSYNCpin) {
+        uint offset = pio_add_program(pio, &SVBsync_program);
+        pio_sm_config c = SVBsync_program_get_default_config(offset);
+        pio_gpio_init(pio, syncPin);
+        pio_sm_set_consecutive_pindirs(pio, sm, syncPin, 1, false);
+        // Set up side-set pins
+    
+        pio_gpio_init(pio, SVBSYNCpin);
+        pio_sm_set_consecutive_pindirs(pio, sm, SVBSYNCpin, 1, true);
+       
+        // Configure the state machine
+        sm_config_set_in_pins(&c, syncPin);
+        sm_config_set_sideset_pins(&c, SVBSYNCpin);
+        sm_config_set_out_shift(&c, false, true, 32);
+        sm_config_set_clkdiv(&c, clk_div);  // Set the clock divider
+        pio_sm_init(pio, sm, offset, &c);
+        pio_sm_set_enabled(pio, sm, true);
+    }
+%}

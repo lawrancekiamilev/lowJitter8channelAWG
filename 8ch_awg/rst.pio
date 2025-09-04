@@ -1,0 +1,35 @@
+.program rst
+.side_set 1 opt
+.wrap_targets
+    out X 32; Output 32 bits to X
+    wait 1 pin 0; Wait for pin 0 to go high
+    jmp delay;
+
+delay:
+    jmp X-- delay side 0 [15]; Decrement X and loop until X is 0
+    wait 0 irq 0(rel);
+    irq set 1 side 1(rel) [12];
+    irq clear 1(rel);
+.wrap
+
+
+% c-sdk {
+    void initrst(PIO pio, uint sm,float clk_div, int syncPin, int RSTSYNCpin) {
+        uint offset = pio_add_program(pio, &rst_program);
+        pio_sm_config c = rst_program_get_default_config(offset);
+        pio_gpio_init(pio, syncPin);
+        pio_sm_set_consecutive_pindirs(pio, sm, syncPin, 1, false);
+        // Set up side-set pins
+    
+        pio_gpio_init(pio, RSTSYNCpin);
+        pio_sm_set_consecutive_pindirs(pio, sm, RSTSYNCpin, 1, true);
+       
+        // Configure the state machine
+        sm_config_set_in_pins(&c, syncPin);
+        sm_config_set_sideset_pins(&c, RSTSYNCpin);
+        sm_config_set_out_shift(&c, false, true, 32);
+        sm_config_set_clkdiv(&c, clk_div);  // Set the clock divider
+        pio_sm_init(pio, sm, offset, &c);
+        pio_sm_set_enabled(pio, sm, true);
+    }
+%}

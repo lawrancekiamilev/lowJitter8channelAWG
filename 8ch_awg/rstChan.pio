@@ -1,0 +1,40 @@
+.program rstChan
+.wrap_target
+    wait 1 pin 0;
+    out pins 8;
+    set pins 19 [2];
+    set pins 23 [2];
+    set pins 21 [2];
+    set pins 31;
+.wrap
+
+% c-sdk {
+    void initrstChan(PIO pio, uint sm,float clk_div, int DATA_PIN_BASE, int SIDESET_PIN_BASE, int RSTsyncPin) {
+        uint offset = pio_add_program(pio, &rstChan_program);
+        pio_sm_config c = rstChan_program_get_default_config(offset);
+    
+    
+        pio_gpio_init(pio, RSTsyncPin);
+        pio_sm_set_consecutive_pindirs(pio, sm, RSTsyncPin, 1, false);
+        sm_config_set_in_pins(&c, RSTsyncPin);
+    
+        for (int i = 0; i < 5; i++) {
+            pio_gpio_init(pio, SIDESET_PIN_BASE + i);
+        }
+        pio_sm_set_consecutive_pindirs(pio, sm, SIDESET_PIN_BASE, 5, true);
+        sm_config_set_set_pins(&c, SIDESET_PIN_BASE, 5);
+        
+        // Set up data output pins
+        for (int i = 0; i < 8; i++) {
+            pio_gpio_init(pio, DATA_PIN_BASE + i);
+        }
+        pio_sm_set_consecutive_pindirs(pio, sm, DATA_PIN_BASE, 8, true);
+        sm_config_set_out_pins(&c, DATA_PIN_BASE, 8);
+        sm_config_set_out_shift(&c, true, true, 8); // Shift out 8 bits, LSB first
+    
+        
+        sm_config_set_clkdiv(&c, clk_div);  // Set the clock divider
+    
+        pio_sm_init(pio, sm, offset, &c);
+    }
+%}
